@@ -1,4 +1,4 @@
-name: Build Redis
+name: Build Redis for Windows
 
 on:
   workflow_call:
@@ -18,6 +18,22 @@ on:
       release_version:
         description: "The version of Redis being built"
         value: ${{ jobs.prepare.outputs.release_version }}
+  workflow_dispatch:
+    inputs:
+      redis_version:
+        description: 'Redis version to build'
+        required: false
+        default: 'latest'
+      create_release:
+        description: 'Create a GitHub release'
+        required: false
+        default: 'false'
+        type: boolean
+      agent_optimized:
+        description: 'Include agent-optimized configurations'
+        required: false
+        default: 'true'
+        type: boolean
 
 jobs:
   prepare:
@@ -43,10 +59,28 @@ jobs:
 
       - name: Setup dotnet
         uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
   
       - name: Publish RedisService.exe
         run: |
-          dotnet publish -c Release -r win-x64 --sc -o publish
+          dotnet publish -c Release -r win-x64 --sc -o publish -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true
+      
+      - name: Prepare Agent Configurations
+        if: ${{ inputs.agent_optimized == 'true' || inputs.agent_optimized == true }}
+        run: |
+          Write-Host "Preparing agent-optimized configurations..."
+          
+          # Copy agent-specific files if they exist
+          if (Test-Path "redis-agent.conf") {
+            Copy-Item "redis-agent.conf" "publish/"
+          }
+          if (Test-Path "AGENT_INTEGRATION_GUIDE.md") {
+            Copy-Item "AGENT_INTEGRATION_GUIDE.md" "publish/"
+          }
+          if (Test-Path "build.ps1") {
+            Copy-Item "build.ps1" "publish/"
+          }
       
       - name: Upload source and RedisService.exe
         uses: actions/upload-artifact@v4

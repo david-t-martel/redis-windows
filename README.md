@@ -1,51 +1,202 @@
-### [English](https://github.com/redis-windows/redis-windows/blob/main/README.md) | [简体中文](https://github.com/redis-windows/redis-windows/blob/main/README.zh_CN.md)
+# Redis for Windows - LLM Agent Ready
 
-# Redis Windows Version
-### With the powerful automated building capability of GitHub Actions, we can compile the latest version of Redis for Windows system in real-time. 
-The entire compilation process is completely transparent and open, with the compilation script located in the [.github/workflows/](https://github.com/redis-windows/redis-windows/tree/main/.github/workflows) directory and the compilation logs available on the [Actions](https://github.com/redis-windows/redis-windows/actions) page. In addition, we have added a hash calculation step when the compilation is completed, and the result is printed in the log. This is unmodifiable and recorded in the release page. You can verify the hash value of the downloaded file against the log and release page.  
-Our project is absolutely pure and without any hidden features, and can withstand the scrutiny of all experts. If you have any good ideas, please feel free to communicate with us.  
+**A production-ready Redis server for Windows with native LLM agent integration and memory management capabilities.**
 
-## We provide three operation modes: 
-1. Run the start.bat script in the project to start directly with one click.
-2. Use the command line.
-3. Support running as a system service.
+## 🤖 Built for LLM Agents
 
-### Command line startup:
-cmd startup: 
-```shell
-redis-server.exe redis.conf
-```
-powershell startup: 
-```shell
-./redis-server.exe redis.conf
-```
+This project provides a high-performance Redis setup specifically optimized for:
 
-### Service installation:
-Can achieve automatic startup on boot. Please run it as an administrator and change RedisService.exe to the actual directory where it is stored.
-```shell
-sc.exe create Redis binpath=T:\\projects\\redis-windows\RedisService.exe start= auto
-```
-Start service
-```shell
+- **Agent Memory Management** - Working and long-term memory for AI agents
+- **Vector Storage & Retrieval** - Optimized for embedding and semantic search
+- **Session Management** - Isolated contexts for multiple agent sessions  
+- **Real-time Performance** - Low-latency responses for agent workflows
+- **Production Deployment** - Windows service with enterprise features
+
+## 🔗 Agent-Memory-Server Integration
+
+Seamlessly integrates with [agent-memory-server](https://github.com/david-t-martel/agent-memory-server) to provide:
+
+- **Conversational Memory** - Automatic summarization and context management
+- **Semantic Search** - Vector-based memory retrieval 
+- **Multi-Session Support** - Isolated memory per agent session
+- **REST & MCP APIs** - Multiple integration options for different agent frameworks
+- **Background Processing** - Async memory compaction and optimization
+
+## 🚀 Quick Start for Agents
+
+```powershell
+# Clone and setup
+git clone https://github.com/david-t-martel/redis-windows.git
+cd redis-windows
+
+# Setup for LLM agents (one command)
+.\build.ps1 -PrepareForAgents
+
+# Start Redis service
 net start Redis
-```
-Out of Service
-```shell
-net stop Redis
-```
-Uninstall service
-```shell
-sc.exe delete Redis
+
+# Your agents can now connect to:
+# Redis: redis://localhost:6379
+# Agent Memory API: http://localhost:8000
+# Agent Memory MCP: ws://localhost:8001
 ```
 
-![image](https://user-images.githubusercontent.com/515784/215540157-65f55297-cde2-49b3-8ab3-14dca7e11ee0.png)
+## 📋 What You Get
 
+### Core Components
+- **Redis Server** (`redis-server.exe`) - High-performance data store
+- **Redis CLI** (`redis-cli.exe`) - Command-line interface
+- **Windows Service** (`RedisService.exe`) - Reliable background operation
+- **Agent Configuration** (`redis-agent.conf`) - Optimized for agent workloads
 
-Project Home: https://github.com/redis-windows/redis-windows
+### Agent Integration
+- **Memory Server Integration** - Automatic setup of agent-memory-server
+- **Optimized Configurations** - Pre-tuned for LLM agent access patterns
+- **Development Tools** - VS Code tasks, debugging, and monitoring
+- **Production Features** - Logging, security, and performance monitoring
 
-## Acknowledgement: 
-[![NetEngine](https://avatars.githubusercontent.com/u/36178221?s=180&v=4)](https://www.zhihu.com/question/424272611/answer/2611312760) 
-[![JetBrains Logo (Main) logo](https://resources.jetbrains.com/storage/products/company/brand/logos/jb_beam.svg)](https://www.jetbrains.com/?from=redis-windows)
+## 🛠️ Build Options
+
+### Interactive Setup
+```powershell
+.\build.ps1
+# Choose from menu options including agent preparation
+```
+
+### Direct Commands
+```powershell
+# Prepare for agents (includes Redis + agent-memory-server)
+.\build.ps1 -PrepareForAgents
+
+# Build Redis service only
+.\build.ps1 -BuildOnly
+
+# Download latest release
+.\build.ps1 -CheckLatestRelease
+
+# Setup agent-memory-server integration
+.\build.ps1 -ConfigureMemoryServer
+
+# Trigger GitHub workflow to build Redis
+.\build.ps1 -GitHubWorkflow
+```
+
+## 🔧 Agent Configuration
+
+### Environment Variables
+```bash
+REDIS_URL=redis://localhost:6379
+AGENT_MEMORY_API_URL=http://localhost:8000
+AGENT_MEMORY_MCP_URL=ws://localhost:8001
+```
+
+### Python Agent Example
+```python
+from agent_memory_client import MemoryClient
+import redis
+
+# Redis direct access
+redis_client = redis.Redis(host='localhost', port=6379)
+
+# Agent memory server
+memory_client = MemoryClient(api_url='http://localhost:8000')
+
+# Store conversation memory
+memory_client.store_working_memory(
+    session_id="agent_session_1",
+    messages=[{"role": "user", "content": "Hello"}]
+)
+```
+
+### MCP Integration
+```json
+{
+  "mcpServers": {
+    "agent-memory": {
+      "command": "agent-memory-server",
+      "args": ["run-mcp"],
+      "env": {
+        "REDIS_URL": "redis://localhost:6379"
+      }
+    }
+  }
+}
+```
+
+## 📖 Documentation
+
+- **[Agent Integration Guide](AGENT_INTEGRATION_GUIDE.md)** - Complete guide for LLM agent developers
+- **[Quick Start Guide](QUICKSTART.md)** - Get running in 5 minutes
+- **[Setup Guide](SETUP_GUIDE.md)** - Detailed installation and configuration
+- **[Project Status](PROJECT_STATUS.md)** - Current features and roadmap
+
+## 🏗️ Architecture
+
+```text
+┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
+│   LLM Agent     │───▶│ Agent Memory    │───▶│ Redis Server    │
+│   (Claude,      │    │ Server          │    │ (This Project)  │
+│   GPT, etc.)    │    │ (Python/FastAPI)│    │ (C#/.NET)       │
+└─────────────────┘    └─────────────────┘    └─────────────────┘
+                              │
+                              ▼
+                       ┌─────────────────┐
+                       │ Vector Store    │
+                       │ (Redis/Other)   │
+                       └─────────────────┘
+```
+
+## ⚡ Performance Features
+
+- **Memory Optimization** - Configured for high-throughput agent workloads
+- **Lazy Freeing** - Non-blocking memory cleanup
+- **Active Defragmentation** - Automatic memory optimization
+- **Connection Pooling** - Efficient multi-agent connection handling
+- **Background Persistence** - Non-blocking data durability
+
+## 🔒 Security Features
+
+- **Authentication** - Redis password protection
+- **Network Security** - Configurable bind addresses
+- **Windows Integration** - Event log monitoring
+- **Agent Isolation** - Session-based memory separation
+- **OAuth2 Support** - Via agent-memory-server integration
+
+## 🏢 Production Ready
+
+### Windows Service
+- **Automatic Startup** - Starts with Windows
+- **Process Management** - Automatic restart on failure  
+- **Event Logging** - Integrated with Windows Event Log
+- **Performance Monitoring** - Built-in metrics and alerts
+
+### Monitoring & Debugging
+- **VS Code Integration** - Full debugging support
+- **Performance Metrics** - Redis INFO and slow log
+- **Health Checks** - Service status monitoring
+- **Log Management** - Structured logging for troubleshooting
+
+## 🤝 Contributing
+
+We welcome contributions, especially for:
+- Agent framework integrations
+- Performance optimizations
+- Documentation improvements
+- Testing and validation
+
+## 📄 License
+
+This project is licensed under the same terms as Redis - see [LICENSE](LICENSE) file for details.
+
+## 🙏 Acknowledgments
+
+- **Redis Team** - For the amazing Redis database
+- **Microsoft** - For .NET hosting services
+- **Agent Memory Server** - For the Python memory management framework
+
+---
+
+**Ready to power your AI agents with high-performance memory? Get started with the [Agent Integration Guide](AGENT_INTEGRATION_GUIDE.md)!**
 
 
 ## Disclaimer

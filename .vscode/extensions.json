@@ -1,0 +1,22 @@
+{
+    "recommendations": [
+        "ms-dotnettools.csharp",
+        "ms-dotnettools.csdevkit",
+        "ms-vscode.powershell",
+        "cweijan.redis-client",
+        "humao.rest-client",
+        "github.copilot",
+        "github.copilot-chat",
+        "ms-vscode.github-copilot-extension-pack",
+        "ms-vscode.vscode-github-issue-prs",
+        "eamodio.gitlens",
+        "bradlc.vscode-tailwindcss",
+        "esbenp.prettier-vscode",
+        "formulahendry.code-runner",
+        "ms-vscode.vscode-json",
+        "redhat.vscode-yaml",
+        "davidanson.vscode-markdownlint",
+        "yzhang.markdown-all-in-one",
+        "ms-vscode.hexeditor"
+    ]
+}

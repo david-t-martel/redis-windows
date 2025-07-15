@@ -1,6 +1,53 @@
+# Build artifacts
+bin/
 */bin/
-*/release
+obj/
 */obj/
+publish/
+*/publish/
+*.exe
+*.dll
+*.pdb
 
+# Configuration files with secrets
 redis.conf
 .env
+.env.local
+.env.production
+
+# IDE and editor files
+.vs/
+*.swp
+*.swo
+*~
+
+# Keep .vscode/ for project configuration
+# .vscode/ - intentionally not ignored
+
+# Redis data and logs
+*.rdb
+*.aof
+redis.log
+dump.rdb
+appendonly.aof
+
+# Windows specific
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# Temporary files
+*.tmp
+*.temp
+
+# Package managers
+node_modules/
+packages/
+
+# Logs
+logs/
+*.log
+
+# Runtime files
+*.pid
+*.lock

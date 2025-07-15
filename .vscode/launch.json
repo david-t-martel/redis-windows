@@ -1,0 +1,49 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Debug Redis Service",
+            "type": "coreclr",
+            "request": "launch",
+            "preLaunchTask": "build",
+            "program": "${workspaceFolder}/bin/Debug/net8.0/win-x64/RedisService.exe",
+            "args": [
+                "-c",
+                "${workspaceFolder}/redis.conf",
+                "--debug"
+            ],
+            "cwd": "${workspaceFolder}",
+            "console": "internalConsole",
+            "stopAtEntry": false,
+            "env": {
+                "DOTNET_ENVIRONMENT": "Development",
+                "REDIS_LOG_LEVEL": "Debug"
+            }
+        },
+        {
+            "name": "Debug Redis Service (Console)",
+            "type": "coreclr",
+            "request": "launch",
+            "preLaunchTask": "build",
+            "program": "${workspaceFolder}/bin/Debug/net8.0/win-x64/RedisService.exe",
+            "args": [
+                "-c",
+                "${workspaceFolder}/redis.conf",
+                "--console"
+            ],
+            "cwd": "${workspaceFolder}",
+            "console": "externalTerminal",
+            "stopAtEntry": false,
+            "env": {
+                "DOTNET_ENVIRONMENT": "Development",
+                "REDIS_LOG_LEVEL": "Debug"
+            }
+        },
+        {
+            "name": "Attach to Redis Service",
+            "type": "coreclr",
+            "request": "attach",
+            "processName": "RedisService.exe"
+        }
+    ]
+}

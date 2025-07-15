@@ -1,0 +1,39 @@
+{
+    "files.exclude": {
+        "**/bin": true,
+        "**/obj": true,
+        "**/publish": true,
+        "**/.vs": true,
+        "**/Thumbs.db": true,
+        "**/.DS_Store": true
+    },
+    "search.exclude": {
+        "**/bin": true,
+        "**/obj": true,
+        "**/publish": true,
+        "**/node_modules": true,
+        "**/.git": true
+    },
+    "dotnet.defaultSolution": "redis-windows.sln",
+    "omnisharp.enableEditorConfigSupport": true,
+    "omnisharp.enableRoslynAnalyzers": true,
+    "editor.formatOnSave": true,
+    "editor.codeActionsOnSave": {
+        "source.fixAll": "explicit",
+        "source.organizeImports": "explicit"
+    },
+    "csharp.format.enable": true,
+    "csharp.semanticHighlighting.enabled": true,
+    "powershell.scriptAnalysis.enable": true,
+    "powershell.codeFormatting.useCorrectCasing": true,
+    "files.defaultLanguage": "csharp",
+    "terminal.integrated.defaultProfile.windows": "PowerShell",
+    "git.confirmSync": false,
+    "git.enableSmartCommit": true,
+    "git.autofetch": true,
+    "redis.defaultConnection": {
+        "host": "localhost",
+        "port": 6379,
+        "name": "Local Redis"
+    }
+}
