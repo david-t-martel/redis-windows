@@ -1,8 +1,5 @@
 {
     "files.exclude": {
-        "**/bin": true,
-        "**/obj": true,
-        "**/publish": true,
         "**/.vs": true,
         "**/Thumbs.db": true,
         "**/.DS_Store": true
@@ -10,7 +7,6 @@
     "search.exclude": {
         "**/bin": true,
         "**/obj": true,
-        "**/publish": true,
         "**/node_modules": true,
         "**/.git": true
     },

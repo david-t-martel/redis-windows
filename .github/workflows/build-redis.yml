@@ -32,7 +32,7 @@ on:
       agent_optimized:
         description: "Include agent-optimized configurations"
         required: false
-        default: "true"
+        default: true
         type: boolean
 
 jobs:
