@@ -23,7 +23,7 @@ powershell startup:
 ### Service installation:
 Can achieve automatic startup on boot. Please run it as an administrator and change RedisService.exe to the actual directory where it is stored.
 ```shell
-sc.exe create Redis binpath=C:\Software\Redis\RedisService.exe start= auto
+sc.exe create Redis binpath=T:\\projects\\redis-windows\RedisService.exe start= auto
 ```
 Start service
 ```shell
