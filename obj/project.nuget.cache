@@ -1,0 +1,33 @@
+{
+  "version": 2,
+  "dgSpecHash": "nLiLRbOyoEc=",
+  "success": false,
+  "projectFilePath": "T:\\projects\\redis-windows\\RedisService.csproj",
+  "expectedPackageFiles": [],
+  "logs": [
+    {
+      "code": "NU1101",
+      "level": "Error",
+      "message": "Unable to find package Microsoft.Extensions.Hosting.WindowsServices. No packages exist with this id in source(s): C:\\Program Files\\dotnet\\library-packs, Microsoft Visual Studio Offline Packages",
+      "projectPath": "T:\\projects\\redis-windows\\RedisService.csproj",
+      "filePath": "T:\\projects\\redis-windows\\RedisService.csproj",
+      "libraryId": "Microsoft.Extensions.Hosting.WindowsServices",
+      "targetGraphs": [
+        "net8.0",
+        "net8.0/win-x64"
+      ]
+    },
+    {
+      "code": "NU1101",
+      "level": "Error",
+      "message": "Unable to find package Microsoft.NET.ILLink.Tasks. No packages exist with this id in source(s): C:\\Program Files\\dotnet\\library-packs, Microsoft Visual Studio Offline Packages",
+      "projectPath": "T:\\projects\\redis-windows\\RedisService.csproj",
+      "filePath": "T:\\projects\\redis-windows\\RedisService.csproj",
+      "libraryId": "Microsoft.NET.ILLink.Tasks",
+      "targetGraphs": [
+        "net8.0",
+        "net8.0/win-x64"
+      ]
+    }
+  ]
+}
