@@ -12,6 +12,7 @@ param(
     [switch]$CheckLatestRelease,
     [switch]$PrepareForAgents,
     [switch]$ConfigureMemoryServer,
+    [switch]$SetupUvEnvironment,
     [string]$RedisPort = "6379",
     [string]$AgentMemoryPort = "8000"
 )
@@ -78,7 +79,7 @@ function Get-LatestGitHubRelease {
     
     try {
         if (Test-GitHubCLI) {
-            $releaseInfo = & gh release list --repo "$Owner/$Repo" --limit 1 --json tagName,url,publishedAt 2>$null | ConvertFrom-Json
+            $releaseInfo = & gh release list --repo "$Owner/$Repo" --limit 1 --json tagName, url, publishedAt 2>$null | ConvertFrom-Json
             if ($releaseInfo -and $releaseInfo.Count -gt 0) {
                 return $releaseInfo[0]
             }
@@ -87,8 +88,8 @@ function Get-LatestGitHubRelease {
         # Fallback to REST API
         $response = Invoke-RestMethod -Uri "https://api.github.com/repos/$Owner/$Repo/releases/latest" -ErrorAction Stop
         return @{
-            tagName = $response.tag_name
-            url = $response.html_url
+            tagName     = $response.tag_name
+            url         = $response.html_url
             publishedAt = $response.published_at
         }
     }
@@ -140,7 +141,7 @@ function Wait-ForWorkflowCompletion {
     
     do {
         try {
-            $runs = & gh run list --limit 1 --json status,conclusion,workflowName 2>$null | ConvertFrom-Json
+            $runs = & gh run list --limit 1 --json status, conclusion, workflowName 2>$null | ConvertFrom-Json
             if ($runs -and $runs.Count -gt 0) {
                 $latestRun = $runs[0]
                 $status = $latestRun.status
@@ -330,26 +331,57 @@ function Build-RedisService {
     }
 }
 
+function Test-UvInstallation {
+    try {
+        $uvVersion = & uv --version 2>$null
+        if ($LASTEXITCODE -eq 0) {
+            Write-Info "UV found: $uvVersion"
+            
+            # Check UV-managed Python
+            $uvPython = & uv python list 2>$null
+            if ($LASTEXITCODE -eq 0) {
+                Write-Info "UV-managed Python versions available"
+                return $true
+            }
+            else {
+                Write-Warning "UV found but no Python installations detected"
+                Write-Info "Installing Python via UV..."
+                & uv python install 3.13
+                return $true
+            }
+        }
+    }
+    catch {
+        Write-Warning "UV not found. Install from: https://docs.astral.sh/uv/getting-started/installation/"
+        return $false
+    }
+    return $false
+}
+
 function Test-AgentMemoryServerIntegration {
-    Write-Info "Testing agent-memory-server integration..."
+    Write-Info "Testing agent-memory-server integration with centralized UV environment..."
+    
+    # Check if UV is available
+    $hasUv = Test-UvInstallation
+    Write-Host ""
+    Write-Host "Agent Memory Server Integration Status:" -ForegroundColor Cyan
+    Write-Host "  UV Package Manager:  $(if($hasUv){'✓'}else{'✗'})" -ForegroundColor $(if ($hasUv) { 'Green' }else { 'Red' })
+    
+    # Check centralized venv
+    $centralVenv = "C:\users\david\.venv"
+    $hasCentralVenv = Test-Path $centralVenv
+    Write-Host "  Central Python Env:  $(if($hasCentralVenv){'✓ Found at ' + $centralVenv}else{'✗ Not found'})" -ForegroundColor $(if ($hasCentralVenv) { 'Green' }else { 'Red' })
     
     # Check if agent-memory-server is available
     $agentMemoryPath = Join-Path $env:USERPROFILE "agent-memory-server"
     $hasAgentMemory = Test-Path $agentMemoryPath
-    
-    Write-Host ""
-    Write-Host "Agent Memory Server Integration Status:" -ForegroundColor Cyan
-    Write-Host "  Agent Memory Server: $(if($hasAgentMemory){'✓ Found at ' + $agentMemoryPath}else{'✗ Not found'})" -ForegroundColor $(if($hasAgentMemory){'Green'}else{'Red'})
+    Write-Host "  Agent Memory Server: $(if($hasAgentMemory){'✓ Found at ' + $agentMemoryPath}else{'✗ Not found'})" -ForegroundColor $(if ($hasAgentMemory) { 'Green' }else { 'Red' })
     
     if ($hasAgentMemory) {
-        # Check for Python environment
-        $pythonEnv = Test-Path (Join-Path $agentMemoryPath ".venv")
-        Write-Host "  Python Environment:  $(if($pythonEnv){'✓'}else{'✗'})" -ForegroundColor $(if($pythonEnv){'Green'}else{'Red'})
-        
         # Check configuration
         $configFile = Join-Path $agentMemoryPath ".env"
         $hasConfig = Test-Path $configFile
-        Write-Host "  Configuration:       $(if($hasConfig){'✓'}else{'✗'})" -ForegroundColor $(if($hasConfig){'Green'}else{'Red'})
+        Write-Host "  Configuration:       $(if($hasConfig){'✓'}else{'✗'})" -ForegroundColor $(if ($hasConfig) { 'Green' }else { 'Red' })
         
         if ($hasConfig) {
             # Check Redis connection string
@@ -362,22 +394,35 @@ function Test-AgentMemoryServerIntegration {
                 Write-Host "  Redis Integration:   ⚠ Not configured" -ForegroundColor Yellow
             }
         }
+        
+        # Check if agent-memory-server is installed in central venv
+        if ($hasCentralVenv) {
+            $agentMemoryBin = Join-Path $centralVenv "Scripts\agent-memory-server.exe"
+            $hasAgentMemoryInstalled = Test-Path $agentMemoryBin
+            Write-Host "  Agent Memory Install: $(if($hasAgentMemoryInstalled){'✓ Installed in central venv'}else{'✗ Not installed'})" -ForegroundColor $(if ($hasAgentMemoryInstalled) { 'Green' }else { 'Red' })
+        }
     }
     else {
         Write-Host ""
-        Write-Host "To set up agent-memory-server integration:" -ForegroundColor Yellow
+        Write-Host "To set up agent-memory-server integration with UV:" -ForegroundColor Yellow
         Write-Host "1. Clone: git clone https://github.com/david-t-martel/agent-memory-server.git" -ForegroundColor Yellow
-        Write-Host "2. Setup: cd agent-memory-server && python -m venv .venv" -ForegroundColor Yellow
-        Write-Host "3. Install: .venv\Scripts\activate && pip install -e ." -ForegroundColor Yellow
-        Write-Host "4. Configure: copy .env.example .env" -ForegroundColor Yellow
+        Write-Host "2. Setup: Use this script's -ConfigureMemoryServer option" -ForegroundColor Yellow
+        Write-Host "3. UV will manage the centralized environment automatically" -ForegroundColor Yellow
     }
     
     Write-Host ""
-    return $hasAgentMemory
+    return $hasAgentMemory -and $hasUv -and $hasCentralVenv
 }
 
 function Set-AgentMemoryServerConfig {
-    Write-Info "Configuring agent-memory-server for Redis integration..."
+    Write-Info "Configuring agent-memory-server for Redis integration using UV..."
+    
+    # Check UV first
+    if (-not (Test-UvInstallation)) {
+        Write-Error "UV is required for centralized Python environment management"
+        Write-Host "Install UV from: https://docs.astral.sh/uv/getting-started/installation/" -ForegroundColor Yellow
+        return $false
+    }
     
     $agentMemoryPath = Join-Path $env:USERPROFILE "agent-memory-server"
     if (-not (Test-Path $agentMemoryPath)) {
@@ -407,6 +452,40 @@ function Set-AgentMemoryServerConfig {
         else {
             return $false
         }
+    }
+    
+    # Install agent-memory-server in central venv using UV
+    Write-Info "Installing agent-memory-server in centralized environment with UV..."
+    try {
+        Set-Location $agentMemoryPath
+        
+        # Ensure we have UV-managed Python 3.13
+        Write-Info "Ensuring Python 3.13 is available via UV..."
+        & uv python install 3.13 2>&1 | Out-Null
+        
+        # Create or use centralized venv with UV-managed Python
+        $centralVenv = "C:\users\david\.venv"
+        if (-not (Test-Path $centralVenv)) {
+            Write-Info "Creating centralized virtual environment with UV-managed Python..."
+            & uv venv $centralVenv --python 3.13 2>&1
+        }
+        
+        # Install in centralized venv using UV
+        Write-Info "Installing agent-memory-server with UV..."
+        $installResult = & uv pip install --python $centralVenv -e . 2>&1
+        if ($LASTEXITCODE -ne 0) {
+            Write-Error "Failed to install agent-memory-server: $installResult"
+            Set-Location $PSScriptRoot
+            return $false
+        }
+        
+        Write-Success "Agent-memory-server installed successfully with UV"
+        Set-Location $PSScriptRoot
+    }
+    catch {
+        Write-Error "Error installing agent-memory-server: $_"
+        Set-Location $PSScriptRoot
+        return $false
     }
     
     $configFile = Join-Path $agentMemoryPath ".env"
@@ -481,28 +560,53 @@ function Set-AgentMemoryServerConfig {
 }
 
 function Start-AgentMemoryServer {
-    Write-Info "Starting agent-memory-server..."
+    Write-Info "Starting agent-memory-server with centralized UV environment..."
+    
+    # Check UV first
+    if (-not (Test-UvInstallation)) {
+        Write-Error "UV is required for centralized Python environment management"
+        return $false
+    }
     
     $agentMemoryPath = Join-Path $env:USERPROFILE "agent-memory-server"
     if (-not (Test-Path $agentMemoryPath)) {
         Write-Error "Agent memory server not found"
+        Write-Info "Run .\build.ps1 -ConfigureMemoryServer to set up agent-memory-server"
         return $false
     }
     
-    $venvActivate = Join-Path $agentMemoryPath ".venv\Scripts\Activate.ps1"
-    if (-not (Test-Path $venvActivate)) {
-        Write-Warning "Python virtual environment not found. Setting up..."
+    # Check centralized venv
+    $centralVenv = "C:\users\david\.venv"
+    $agentMemoryBin = Join-Path $centralVenv "Scripts\agent-memory-server.exe"
+    
+    if (-not (Test-Path $agentMemoryBin)) {
+        Write-Warning "Agent-memory-server not found in centralized environment. Installing..."
         
         try {
             Set-Location $agentMemoryPath
-            & python -m venv .venv
-            & .venv\Scripts\activate
-            & pip install -e .
-            Write-Success "Python environment setup completed"
+            
+            # Create centralized venv if it doesn't exist using UV-managed Python
+            if (-not (Test-Path $centralVenv)) {
+                Write-Info "Creating centralized virtual environment with UV-managed Python..."
+                & uv python install 3.13 2>&1 | Out-Null
+                & uv venv $centralVenv --python 3.13
+            }
+            
+            # Install agent-memory-server using UV
+            Write-Info "Installing agent-memory-server with UV..."
+            & uv pip install --python $centralVenv -e .
+            
+            if ($LASTEXITCODE -ne 0) {
+                Write-Error "Failed to install agent-memory-server"
+                Set-Location $PSScriptRoot
+                return $false
+            }
+            
+            Write-Success "Agent-memory-server installed successfully"
             Set-Location $PSScriptRoot
         }
         catch {
-            Write-Error "Failed to setup Python environment: $_"
+            Write-Error "Failed to setup agent-memory-server: $_"
             Set-Location $PSScriptRoot
             return $false
         }
@@ -510,11 +614,17 @@ function Start-AgentMemoryServer {
     
     Write-Info "Starting agent-memory-server API and MCP servers..."
     Write-Host "Use Ctrl+C to stop the servers" -ForegroundColor Yellow
+    Write-Host "Using centralized UV environment: $centralVenv" -ForegroundColor Cyan
     
     try {
+        # Use UV to run the command with the centralized venv
         Set-Location $agentMemoryPath
-        & $venvActivate
-        & agent-memory-server run-all
+        
+        # Set environment to use UV-managed Python explicitly
+        $env:PATH = "$centralVenv\Scripts;$env:PATH"
+        
+        # Use UV run to execute with the correct Python environment
+        & uv run --python $centralVenv agent-memory-server run-all
     }
     catch {
         Write-Error "Failed to start agent-memory-server: $_"
@@ -523,8 +633,452 @@ function Start-AgentMemoryServer {
         Set-Location $PSScriptRoot
     }
 }
-    Write-Info "Testing Redis setup..."
+
+function Setup-UvEnvironment {
+    Write-Info "Setting up centralized UV environment for LLM agents..."
     
+    # Check UV installation
+    if (-not (Test-UvInstallation)) {
+        Write-Error "UV is required for this setup"
+        Write-Host "Install UV from: https://docs.astral.sh/uv/getting-started/installation/" -ForegroundColor Yellow
+        return $false
+    }
+    
+    $centralVenv = "C:\users\david\.venv"
+    
+    # Validate the centralized venv path - make it more flexible
+    if (-not $centralVenv -or $centralVenv -eq "") {
+        Write-Error "Central venv path is not properly configured"
+        return $false
+    }
+    
+    # Ensure the parent directory exists
+    $centralVenvParent = Split-Path $centralVenv -Parent
+    if (-not (Test-Path $centralVenvParent)) {
+        Write-Warning "Parent directory $centralVenvParent does not exist"
+        try {
+            New-Item -ItemType Directory -Path $centralVenvParent -Force | Out-Null
+            Write-Info "Created parent directory: $centralVenvParent"
+        }
+        catch {
+            Write-Error "Failed to create parent directory: $_"
+            return $false
+        }
+    }
+    
+    # Create centralized venv if it doesn't exist using UV's Python management
+    if (-not (Test-Path $centralVenv)) {
+        Write-Info "Creating centralized virtual environment at $centralVenv..."
+        
+        # Ensure we have a Python installation via UV
+        Write-Info "Ensuring Python 3.13 is available via UV..."
+        & uv python install 3.13 2>&1 | Out-Null
+        
+        # Create venv with UV-managed Python
+        $createResult = & uv venv $centralVenv --python 3.13 2>&1
+        if ($LASTEXITCODE -ne 0) {
+            Write-Error "Failed to create centralized venv: $createResult"
+            return $false
+        }
+        Write-Success "Centralized virtual environment created with UV-managed Python 3.13"
+    }
+    else {
+        Write-Info "Centralized virtual environment already exists at $centralVenv"
+        
+        # Verify it's using UV-managed Python
+        $pythonPath = Join-Path $centralVenv "Scripts\python.exe"
+        if (Test-Path $pythonPath) {
+            $pythonVersion = & $pythonPath --version 2>&1
+            Write-Info "Using Python: $pythonVersion"
+        }
+    }
+    
+    # Install common LLM agent dependencies using UV
+    Write-Info "Installing common LLM agent dependencies with UV..."
+    $packages = @(
+        "redis",
+        "fastapi",
+        "uvicorn",
+        "pydantic",
+        "python-dotenv",
+        "httpx",
+        "aiofiles"
+    )
+    
+    try {
+        foreach ($package in $packages) {
+            Write-Info "Installing $package with UV..."
+            $installResult = & uv pip install --python $centralVenv $package 2>&1
+            if ($LASTEXITCODE -ne 0) {
+                Write-Warning "Failed to install $package : $installResult"
+            }
+            else {
+                Write-Success "Installed $package"
+            }
+        }
+        Write-Success "Common dependencies installed via UV"
+    }
+    catch {
+        Write-Error "Error installing dependencies: $_"
+        return $false
+    }
+    
+    # Configure agent-memory-server if available
+    $agentMemoryPath = Join-Path $env:USERPROFILE "agent-memory-server"
+    if (Test-Path $agentMemoryPath) {
+        Write-Info "Installing agent-memory-server in centralized environment with UV..."
+        try {
+            Set-Location $agentMemoryPath
+            $installResult = & uv pip install --python $centralVenv -e . 2>&1
+            if ($LASTEXITCODE -eq 0) {
+                Write-Success "Agent-memory-server installed in centralized environment"
+            }
+            else {
+                Write-Warning "Failed to install agent-memory-server: $installResult"
+            }
+            Set-Location $PSScriptRoot
+        }
+        catch {
+            Write-Error "Error installing agent-memory-server: $_"
+            Set-Location $PSScriptRoot
+        }
+    }
+    
+    # Set up comprehensive UV environment aliases for this PowerShell session
+    Write-Info "Setting up UV environment aliases..."
+    
+    # Set up Python alias
+    $uvPythonPath = Join-Path $centralVenv "Scripts\python.exe"
+    if (Test-Path $uvPythonPath) {
+        # Create function aliases to ensure we use UV-managed Python
+        $global:UvPython = $uvPythonPath
+        Write-Success "UV Python alias configured: $global:UvPython"
+        
+        # Test the Python installation
+        $testResult = & $global:UvPython --version 2>&1
+        Write-Info "UV Python version: $testResult"
+    }
+    
+    # Set up UV command aliases to ensure consistent UV usage
+    Write-Info "Setting up UV command aliases..."
+    
+    # Check if UV is in PATH and get its location
+    try {
+        $uvPath = (Get-Command uv -ErrorAction Stop).Source
+        Write-Info "UV executable found at: $uvPath"
+        
+        # Create global aliases for UV commands
+        $global:UV = $uvPath
+        
+        # UV subcommands (all available commands from help)
+        $global:UVRun = "$uvPath run"
+        $global:UVInit = "$uvPath init"
+        $global:UVAdd = "$uvPath add"
+        $global:UVRemove = "$uvPath remove"
+        $global:UVVersion = "$uvPath version"
+        $global:UVSync = "$uvPath sync"
+        $global:UVLock = "$uvPath lock"
+        $global:UVExport = "$uvPath export"
+        $global:UVTree = "$uvPath tree"
+        $global:UVTool = "$uvPath tool"
+        $global:UVPythonCmd = "$uvPath python"
+        $global:UVPip = "$uvPath pip"
+        $global:UVVenv = "$uvPath venv"
+        $global:UVBuild = "$uvPath build"
+        $global:UVPublish = "$uvPath publish"
+        $global:UVCache = "$uvPath cache"
+        $global:UVSelf = "$uvPath self"
+        $global:UVHelp = "$uvPath help"
+        
+        # Create PowerShell functions for easier usage with approved verbs
+        function global:Invoke-UvRun { & $global:UV run @args }
+        function global:Initialize-UvProject { & $global:UV init @args }
+        function global:Add-UvPackage { & $global:UV add @args }
+        function global:Remove-UvPackage { & $global:UV remove @args }
+        function global:Get-UvVersion { & $global:UV version @args }
+        function global:Sync-UvProject { & $global:UV sync @args }
+        function global:Lock-UvProject { & $global:UV lock @args }
+        function global:Export-UvProject { & $global:UV export @args }
+        function global:Show-UvTree { & $global:UV tree @args }
+        function global:Invoke-UvTool { & $global:UV tool @args }
+        function global:Invoke-UvPython { & $global:UV python @args }
+        function global:Invoke-UvPip { & $global:UV pip @args }
+        function global:New-UvVenv { & $global:UV venv @args }
+        function global:Build-UvProject { & $global:UV build @args }
+        function global:Publish-UvProject { & $global:UV publish @args }
+        function global:Clear-UvCache { & $global:UV cache @args }
+        function global:Update-UvSelf { & $global:UV self @args }
+        function global:Get-UvHelp { & $global:UV help @args }
+        
+        # Check if uvx.exe exists in the centralized venv (newer approach)
+        $uvxPath = Join-Path $centralVenv "Scripts\uvx.exe"
+        if (Test-Path $uvxPath) {
+            $global:UVX = $uvxPath
+            function global:Invoke-Uvx { & $global:UVX @args }
+            Write-Info "Found dedicated uvx.exe in centralized environment"
+        }
+        else {
+            # Fallback to uv tool run
+            $global:UVX = "$uvPath tool run"
+            function global:Invoke-Uvx { & $global:UV tool run @args }
+            Write-Info "Using 'uv tool run' for uvx functionality"
+        }
+        
+        # Create agent-specific aliases for the centralized environment
+        function global:Install-AgentPackage { & $global:UV pip --python $centralVenv @args }
+        function global:Invoke-AgentRun { & $global:UV run --python $centralVenv @args }
+        function global:Invoke-AgentPython { & $global:UvPython @args }
+        
+        # Set up aliases for common tools found in the venv
+        $venvScripts = Join-Path $centralVenv "Scripts"
+        Write-Info "Discovering installed executables in centralized environment..."
+        
+        # Get all .exe files in Scripts directory
+        $allExecutables = @()
+        if (Test-Path $venvScripts) {
+            try {
+                $allExecutables = Get-ChildItem -Path $venvScripts -Filter "*.exe" -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Name
+                Write-Info "Found $($allExecutables.Count) executables in centralized environment"
+            }
+            catch {
+                Write-Warning "Could not enumerate executables in Scripts directory: $_"
+            }
+        }
+        
+        # Common tools to check for
+        $toolPaths = @{
+            'agent-memory-server' = Join-Path $venvScripts "agent-memory-server.exe"
+            'agent-memory'        = Join-Path $venvScripts "agent-memory.exe"
+            'fastapi'             = Join-Path $venvScripts "fastapi.exe"
+            'uvicorn'             = Join-Path $venvScripts "uvicorn.exe"
+            'openai'              = Join-Path $venvScripts "openai.exe"
+            'transformers-cli'    = Join-Path $venvScripts "transformers-cli.exe"
+            'huggingface-cli'     = Join-Path $venvScripts "huggingface-cli.exe"
+            'redis-cli'           = Join-Path $venvScripts "redis-cli.exe"
+            'pytest'              = Join-Path $venvScripts "pytest.exe"
+            'pip'                 = Join-Path $venvScripts "pip.exe"
+        }
+        
+        # Create functions for installed tools using global variable references
+        foreach ($toolName in $toolPaths.Keys) {
+            $toolPath = $toolPaths[$toolName]
+            if (Test-Path $toolPath) {
+                switch ($toolName) {
+                    'agent-memory-server' {
+                        $global:AgentMemoryServerExe = $toolPath
+                        function global:Start-AgentMemoryServer { & $global:AgentMemoryServerExe @args }
+                        Set-Alias -Name agent-memory-server -Value Start-AgentMemoryServer -Scope Global
+                    }
+                    'agent-memory' {
+                        $global:AgentMemoryExe = $toolPath
+                        function global:Start-AgentMemory { & $global:AgentMemoryExe @args }
+                        Set-Alias -Name agent-memory -Value Start-AgentMemory -Scope Global
+                    }
+                    'fastapi' {
+                        $global:FastAPIExe = $toolPath
+                        function global:Start-FastAPI { & $global:FastAPIExe @args }
+                    }
+                    'uvicorn' {
+                        $global:UvicornExe = $toolPath
+                        function global:Start-Uvicorn { & $global:UvicornExe @args }
+                        Set-Alias -Name uvicorn -Value Start-Uvicorn -Scope Global
+                    }
+                    'openai' {
+                        $global:OpenAIExe = $toolPath
+                        function global:Invoke-OpenAI { & $global:OpenAIExe @args }
+                        Set-Alias -Name openai -Value Invoke-OpenAI -Scope Global
+                    }
+                    'transformers-cli' {
+                        $global:TransformersExe = $toolPath
+                        function global:Invoke-TransformersCli { & $global:TransformersExe @args }
+                    }
+                    'huggingface-cli' {
+                        $global:HuggingFaceExe = $toolPath
+                        function global:Invoke-HuggingFaceCli { & $global:HuggingFaceExe @args }
+                    }
+                    'redis-cli' {
+                        $global:RedisCliExe = $toolPath
+                        function global:Invoke-RedisCli { & $global:RedisCliExe @args }
+                    }
+                    'pytest' {
+                        $global:PytestExe = $toolPath
+                        function global:Invoke-Pytest { & $global:PytestExe @args }
+                    }
+                    'pip' {
+                        $global:PipExe = $toolPath
+                        function global:Invoke-Pip { & $global:PipExe @args }
+                    }
+                }
+                Write-Info "Configured alias for: $toolName"
+            }
+        }
+        
+        # Create simple aliases that don't conflict with PowerShell cmdlet naming
+        Set-Alias -Name uvx -Value Invoke-Uvx -Scope Global
+        Set-Alias -Name uv-run -Value Invoke-UvRun -Scope Global
+        Set-Alias -Name uv-pip -Value Invoke-UvPip -Scope Global
+        Set-Alias -Name uv-venv -Value New-UvVenv -Scope Global
+        Set-Alias -Name uv-python -Value Invoke-UvPython -Scope Global
+        Set-Alias -Name uv-tool -Value Invoke-UvTool -Scope Global
+        Set-Alias -Name uv-init -Value Initialize-UvProject -Scope Global
+        Set-Alias -Name uv-add -Value Add-UvPackage -Scope Global
+        Set-Alias -Name uv-remove -Value Remove-UvPackage -Scope Global
+        Set-Alias -Name uv-sync -Value Sync-UvProject -Scope Global
+        Set-Alias -Name uv-lock -Value Lock-UvProject -Scope Global
+        Set-Alias -Name uv-tree -Value Show-UvTree -Scope Global
+        Set-Alias -Name agent-pip -Value Install-AgentPackage -Scope Global
+        Set-Alias -Name agent-run -Value Invoke-AgentRun -Scope Global
+        Set-Alias -Name agent-python -Value Invoke-AgentPython -Scope Global
+        
+        # Additional tool aliases if available - updated to use the new discovery system
+        # These are already set up in the loop above
+        
+        Write-Success "UV command aliases configured successfully"
+        Write-Host ""
+        Write-Host "Available UV Aliases:" -ForegroundColor Cyan
+        Write-Host "  Core UV Commands:" -ForegroundColor Yellow
+        Write-Host "    uvx                - Execute packages with UV" -ForegroundColor Green
+        Write-Host "    uv-run             - Run commands in UV environment" -ForegroundColor Green
+        Write-Host "    uv-pip             - UV pip package management" -ForegroundColor Green
+        Write-Host "    uv-venv            - UV virtual environment management" -ForegroundColor Green
+        Write-Host "    uv-python          - UV Python installation management" -ForegroundColor Green
+        Write-Host "    uv-tool            - UV tool management" -ForegroundColor Green
+        Write-Host "    uv-init, uv-add, uv-remove, uv-sync, uv-lock, uv-tree" -ForegroundColor Green
+        Write-Host ""
+        Write-Host "  Agent-Specific Commands:" -ForegroundColor Yellow
+        Write-Host "    agent-pip          - Install packages in centralized agent venv" -ForegroundColor Green
+        Write-Host "    agent-run          - Run commands with centralized agent venv" -ForegroundColor Green
+        Write-Host "    agent-python       - Direct access to centralized agent Python" -ForegroundColor Green
+        if (Test-Path (Join-Path $venvScripts "agent-memory.exe")) {
+            Write-Host "    agent-memory       - Agent memory server executable" -ForegroundColor Green
+        }
+        if (Test-Path (Join-Path $venvScripts "agent-memory-server.exe")) {
+            Write-Host "    agent-memory-server - Agent memory server main executable" -ForegroundColor Green
+        }
+        Write-Host ""
+        Write-Host "  Installed Tools:" -ForegroundColor Yellow
+        if (Test-Path (Join-Path $venvScripts "uvicorn.exe")) {
+            Write-Host "    uvicorn            - ASGI server" -ForegroundColor Green
+        }
+        if (Test-Path (Join-Path $venvScripts "openai.exe")) {
+            Write-Host "    openai             - OpenAI CLI" -ForegroundColor Green
+        }
+        if (Test-Path (Join-Path $venvScripts "transformers-cli.exe")) {
+            Write-Host "    transformers-cli   - Hugging Face Transformers CLI" -ForegroundColor Green
+        }
+        if (Test-Path (Join-Path $venvScripts "huggingface-cli.exe")) {
+            Write-Host "    huggingface-cli    - Hugging Face Hub CLI" -ForegroundColor Green
+        }
+        if (Test-Path (Join-Path $venvScripts "pytest.exe")) {
+            Write-Host "    pytest             - Python testing framework" -ForegroundColor Green
+        }
+        if (Test-Path (Join-Path $venvScripts "redis-cli.exe")) {
+            Write-Host "    redis-cli          - Redis command line interface" -ForegroundColor Green
+        }
+        Write-Host ""
+        
+        # Test some basic UV commands
+        Write-Info "Testing UV command aliases..."
+        try {
+            $uvVersion = & $global:UV --version 2>&1
+            Write-Success "UV version: $uvVersion"
+            
+            & $global:UV python list 2>&1 | Out-Null
+            if ($LASTEXITCODE -eq 0) {
+                Write-Success "UV Python management working"
+            }
+            
+            # Test uvx functionality
+            Write-Info "Testing uvx functionality..."
+            if (Test-Path $uvxPath) {
+                & $global:UVX --help 2>&1 | Out-Null
+                if ($LASTEXITCODE -eq 0) {
+                    Write-Success "uvx executable working (using dedicated uvx.exe)"
+                }
+                else {
+                    Write-Warning "uvx executable test returned non-zero exit code"
+                }
+            }
+            else {
+                & $global:UV tool --help 2>&1 | Out-Null
+                if ($LASTEXITCODE -eq 0) {
+                    Write-Success "uvx functionality working (using 'uv tool')"
+                }
+                else {
+                    Write-Warning "uv tool test returned non-zero exit code"
+                }
+            }
+        }
+        catch {
+            Write-Warning "Error testing UV commands: $_"
+        }
+        
+        # Display comprehensive summary of discovered tools
+        Write-Host ""
+        Write-Host "Discovered Executables Summary:" -ForegroundColor Cyan
+        if ($allExecutables.Count -gt 0) {
+            $allExecutables | Sort-Object | ForEach-Object {
+                $toolName = $_ -replace "\.exe$", ""
+                Write-Host "  $toolName" -ForegroundColor Gray
+            }
+        }
+        else {
+            Write-Host "  No executables found in Scripts directory" -ForegroundColor Yellow
+        }
+    }
+    catch {
+        Write-Warning "Could not find UV executable in PATH: $_"
+        Write-Host "Please ensure UV is properly installed and in your PATH" -ForegroundColor Yellow
+    }
+    
+    Write-Success "UV environment setup completed!"
+    Write-Host ""
+    Write-Host "Centralized Environment Details:" -ForegroundColor Cyan
+    Write-Host "  Location: $centralVenv" -ForegroundColor Green
+    Write-Host "  Python: $(& $uvPythonPath --version 2>&1)" -ForegroundColor Green
+    Write-Host "  UV Python Path: $uvPythonPath" -ForegroundColor Green
+    Write-Host "  Packages: Use 'uv pip list --python $centralVenv' to view installed packages" -ForegroundColor Green
+    Write-Host ""
+    Write-Host "Environment Variables and Aliases Set:" -ForegroundColor Cyan
+    Write-Host "  `$global:UvPython = $global:UvPython" -ForegroundColor Green
+    Write-Host "  `$global:UV = $global:UV" -ForegroundColor Green
+    if (Test-Path (Join-Path $centralVenv "Scripts\uvx.exe")) {
+        Write-Host "  `$global:UVX = $global:UVX (dedicated uvx.exe)" -ForegroundColor Green
+    }
+    else {
+        Write-Host "  `$global:UVX = $global:UVX (uv tool run)" -ForegroundColor Green
+    }
+    Write-Host "  UV aliases: uvx, uv-run, uv-pip, uv-venv, uv-python, uv-tool, etc." -ForegroundColor Green
+    Write-Host "  Agent aliases: agent-pip, agent-run, agent-python, agent-memory" -ForegroundColor Green
+    if (Test-Path (Join-Path $centralVenv "Scripts\uvicorn.exe")) {
+        Write-Host "  Tool aliases: uvicorn, openai, transformers-cli, huggingface-cli, pytest, redis-cli" -ForegroundColor Green
+    }
+    else {
+        Write-Host "  Tool aliases: (install tools to see available aliases)" -ForegroundColor Green
+    }
+    Write-Host ""
+    Write-Host "Usage Examples:" -ForegroundColor Cyan
+    Write-Host "  uvx ruff check .                    # Run ruff with uvx" -ForegroundColor Yellow
+    Write-Host "  uv-tool run black .                 # Run black formatter" -ForegroundColor Yellow
+    Write-Host "  agent-pip install numpy             # Install in centralized venv" -ForegroundColor Yellow
+    Write-Host "  agent-run python -c 'import sys; print(sys.version)'" -ForegroundColor Yellow
+    Write-Host "  agent-python --version              # Direct Python access" -ForegroundColor Yellow
+    if (Test-Path (Join-Path $centralVenv "Scripts\agent-memory.exe")) {
+        Write-Host "  agent-memory run-all                # Start agent memory server" -ForegroundColor Yellow
+    }
+    if (Test-Path (Join-Path $centralVenv "Scripts\agent-memory-server.exe")) {
+        Write-Host "  agent-memory-server run-all         # Start agent memory server" -ForegroundColor Yellow
+    }
+    if (Test-Path (Join-Path $centralVenv "Scripts\uvicorn.exe")) {
+        Write-Host "  uvicorn main:app --reload          # Start FastAPI server" -ForegroundColor Yellow
+    }
+    Write-Host ""
+    
+    return $true
+}
+
+function Test-RedisSetup {
+    Write-Info "Testing Redis setup..."
     $hasRedisServer = Test-Path "redis-server.exe"
     $hasRedisCli = Test-Path "redis-cli.exe"
     $hasConfig = Test-Path "redis.conf"
@@ -532,10 +1086,10 @@ function Start-AgentMemoryServer {
     
     Write-Host ""
     Write-Host "Current setup status:" -ForegroundColor Cyan
-    Write-Host "  Redis Server:  $(if($hasRedisServer){'✓'}else{'✗'})" -ForegroundColor $(if($hasRedisServer){'Green'}else{'Red'})
-    Write-Host "  Redis CLI:     $(if($hasRedisCli){'✓'}else{'✗'})" -ForegroundColor $(if($hasRedisCli){'Green'}else{'Red'})
-    Write-Host "  Configuration: $(if($hasConfig){'✓'}else{'✗'})" -ForegroundColor $(if($hasConfig){'Green'}else{'Red'})
-    Write-Host "  Service:       $(if($hasService){'✓'}else{'✗'})" -ForegroundColor $(if($hasService){'Green'}else{'Red'})
+    Write-Host "  Redis Server:  $(if($hasRedisServer){'✓'}else{'✗'})" -ForegroundColor $(if ($hasRedisServer) { 'Green' }else { 'Red' })
+    Write-Host "  Redis CLI:     $(if($hasRedisCli){'✓'}else{'✗'})" -ForegroundColor $(if ($hasRedisCli) { 'Green' }else { 'Red' })
+    Write-Host "  Configuration: $(if($hasConfig){'✓'}else{'✗'})" -ForegroundColor $(if ($hasConfig) { 'Green' }else { 'Red' })
+    Write-Host "  Service:       $(if($hasService){'✓'}else{'✗'})" -ForegroundColor $(if ($hasService) { 'Green' }else { 'Red' })
     Write-Host ""
     
     if (-not $hasRedisServer) {
@@ -597,80 +1151,7 @@ function Start-AgentMemoryServer {
     return $true
 }
 
-function Test-RedisSetup {
-    Write-Info "Testing Redis setup..."
-    
-    $hasRedisServer = Test-Path "redis-server.exe"
-    $hasRedisCli = Test-Path "redis-cli.exe"
-    $hasConfig = Test-Path "redis.conf"
-    $hasService = Test-Path "RedisService.exe"
-    
-    Write-Host ""
-    Write-Host "Current setup status:" -ForegroundColor Cyan
-    Write-Host "  Redis Server:  $(if($hasRedisServer){'✓'}else{'✗'})" -ForegroundColor $(if($hasRedisServer){'Green'}else{'Red'})
-    Write-Host "  Redis CLI:     $(if($hasRedisCli){'✓'}else{'✗'})" -ForegroundColor $(if($hasRedisCli){'Green'}else{'Red'})
-    Write-Host "  Configuration: $(if($hasConfig){'✓'}else{'✗'})" -ForegroundColor $(if($hasConfig){'Green'}else{'Red'})
-    Write-Host "  Service:       $(if($hasService){'✓'}else{'✗'})" -ForegroundColor $(if($hasService){'Green'}else{'Red'})
-    Write-Host ""
-    
-    if (-not $hasRedisServer) {
-        Write-Warning "redis-server.exe not found. Redis cannot run without it."
-        return $false
-    }
-    
-    if (-not $hasConfig) {
-        Write-Warning "redis.conf not found. Creating default configuration..."
-        # The redis.conf should already exist from our earlier creation
-    }
-    
-    # Test Redis server startup
-    if ($hasRedisServer) {
-        Write-Info "Testing Redis server startup..."
-        
-        try {
-            # Start Redis in background
-            $redisProcess = Start-Process -FilePath ".\redis-server.exe" -ArgumentList "redis.conf" -PassThru -WindowStyle Hidden
-            Start-Sleep -Seconds 3
-            
-            if ($hasRedisCli) {
-                # Test connectivity
-                $pingResult = & .\redis-cli.exe ping 2>$null
-                if ($pingResult -eq "PONG") {
-                    Write-Success "Redis is responding to ping commands"
-                    $testPassed = $true
-                }
-                else {
-                    Write-Warning "Redis not responding to ping"
-                    $testPassed = $false
-                }
-                
-                # Shutdown test instance
-                & .\redis-cli.exe shutdown nosave 2>$null | Out-Null
-            }
-            else {
-                Write-Warning "Cannot test connectivity - redis-cli.exe not found"
-                $testPassed = $true  # Assume it's working
-                
-                # Kill the test process
-                Stop-Process -Id $redisProcess.Id -Force 2>$null
-            }
-            
-            # Wait for process to exit
-            try {
-                $redisProcess.WaitForExit(5000)
-            }
-            catch {}
-            
-            return $testPassed
-        }
-        catch {
-            Write-Error "Failed to test Redis server: $_"
-            return $false
-        }
-    }
-    
-    return $true
-}
+
 
 function Install-RedisService {
     if (-not (Test-Administrator)) {
@@ -792,11 +1273,12 @@ function Show-Help {
     Write-Host "  .\build.ps1 -CheckLatestRelease    - Check for latest release"
     Write-Host "  .\build.ps1 -PrepareForAgents      - Configure for LLM agents"
     Write-Host "  .\build.ps1 -ConfigureMemoryServer - Setup agent-memory-server"
+    Write-Host "  .\build.ps1 -SetupUvEnvironment    - Setup centralized UV environment"
     Write-Host "  .\build.ps1 -Help                  - Show this help"
     Write-Host ""
     Write-Host "Parameters:" -ForegroundColor Yellow
-    Write-Host "  -RedisPort <port>         - Redis port (default: 6379)"
-    Write-Host "  -AgentMemoryPort <port>   - Agent memory server port (default: 8000)"
+    Write-Host "  -RedisPort [port]         - Redis port (default: 6379)" -ForegroundColor Yellow
+    Write-Host "  -AgentMemoryPort [port]   - Agent memory server port (default: 8000)" -ForegroundColor Yellow
     Write-Host ""
     Write-Host "Examples:" -ForegroundColor Yellow
     Write-Host "  # Full interactive setup"
@@ -828,10 +1310,11 @@ function Show-Menu {
     Write-Host "10. Setup agent-memory-server integration"
     Write-Host "11. Test agent-memory-server integration"
     Write-Host "12. Start agent-memory-server"
-    Write-Host "13. Exit"
+    Write-Host "13. Setup centralized UV environment"
+    Write-Host "14. Exit"
     Write-Host ""
     
-    $choice = Read-Host "Enter your choice (1-13)"
+    $choice = Read-Host "Enter your choice (1-14)"
     return $choice
 }
 
@@ -908,6 +1391,11 @@ if ($GitHubWorkflow) {
 
 if ($ConfigureMemoryServer) {
     Set-AgentMemoryServerConfig
+    exit 0
+}
+
+if ($SetupUvEnvironment) {
+    Setup-UvEnvironment
     exit 0
 }
 
@@ -1041,16 +1529,19 @@ do {
         "12" {
             Start-AgentMemoryServer
         }
-        "13" { break }
-        default { Write-Warning "Invalid choice. Please select 1-13." }
+        "13" {
+            Setup-UvEnvironment
+        }
+        "14" { break }
+        default { Write-Warning "Invalid choice. Please select 1-14." }
     }
     
-    if ($choice -ne "13") {
+    if ($choice -ne "14") {
         Write-Host ""
         Read-Host "Press Enter to continue..."
     }
     
-} while ($choice -ne "13")
+} while ($choice -ne "14")
 
 Show-Summary
 Write-Host "Goodbye!" -ForegroundColor Cyan
